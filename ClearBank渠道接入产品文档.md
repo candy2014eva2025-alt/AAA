@@ -5,6 +5,8 @@
 > 参考资料：
 > - 现有 CC 接入需求：飞书《The Currency Cloud 渠道接入产品文档》
 > - ClearBank Developer Portal：https://clearbank.github.io/uk/docs/
+> - **账户模型权威依据**：ClearBank《GBP accounts → Account types》https://clearbank.github.io/uk/docs/gbp-accounts/account-types/ （本文档 2.1.4 账户类型体系严格依据此页）
+> - 多币种账户类型对照：https://clearbank.github.io/uk/docs/multi-currency/multi-currency-account-types/
 
 ---
 
@@ -50,9 +52,12 @@
 | 账户分配优先级      | 0                                       |
 | 渠道类型            | CA 渠道                                  |
 | 账户获取方式        | 实时                                     |
-| **是否提前申请 VA 号** | **是**（ClearBank Real Account 先创建，再为每个客户开 vIBAN） |
+| **是否提前申请 VA 号** | **是**（先开 Real 池化账户，再为每个客户开 vIBAN） |
 | **是否支持多币种**     | **否（仅 GBP）**                          |
 | **支持支付方式**       | **FPS、CHAPS、BACS、Cross-Border GBP**    |
+| **Real 池化账户 Kind** | **`GeneralSegregated` 或 `GeneralClient`（仅此两类可挂 vIBAN，创建后不可改）** |
+| **Operational 账户**   | **`YourFunds`（收手续费/利息）**           |
+| **L1 Real Account ID** | （运营录入：客户资金池 Real account id，vIBAN 挂其下） |
 
 #### 2.1.2 KYC 认证
 
@@ -74,18 +79,53 @@
   - 渠道进件审核 → CC：现有逻辑不变
 - 系统在渠道审核流转日志里写入一条"ClearBank 渠道无需进件，系统自动通过"的说明，便于追溯。
 
-#### 2.1.4 创建客户的 VA 账户
+#### 2.1.4 ClearBank 账户类型体系（严格依据《Account types》接口文档）
 
-ClearBank 的账户体系与 CC 不同：
+> 本节完全依据 ClearBank Developer Portal《GBP accounts → Account types》页面（https://clearbank.github.io/uk/docs/gbp-accounts/account-types/）撰写。ClearBank 的账户模型与 CC 完全不同，是"Real account（真实账户）+ Virtual account（vIBAN）"两层，且 Real account 必须在创建时指定 **Kind（账户类型）**，**创建后不可修改**。
 
-- **Real Account（一级真实账户）**：APG 作为 Institution 在 ClearBank 持有的法人段隔离账户（FCA segregated GBP general account），全公司复用一个，**不为每个客户单独申请**，由运营事前在 ClearBank 平台开好后录入"渠道-银行配置"。
-- **Virtual Account / vIBAN（二级虚拟账户）**：挂在 Real Account 之下，**每个客户对应 1 个或多个 vIBAN**。每个 vIBAN 自带独立 sort code + account number + IBAN，可独立收付。
-- 创建子账户的判断条件：
+##### （1）Real account 与 Virtual account
+
+- **Real account（真实账户）**：真正持有资金的账户。APG 作为机构（Institution）在 ClearBank 名下持有。
+- **Virtual account / vIBAN（虚拟账户）**：只是挂在某个 Real account 之下的**台账（ledger）视图**，自身不独立持有资金，资金统一沉淀在所属 Real account 中。每个 vIBAN 有自己可寻址的 **sort code + account number + IBAN**，可独立收付款。
+- **硬性约束**：vIBAN **只能创建在 Real 的 General（池化 / pooled）账户之下**，即 `GeneralSegregated` 或 `GeneralClient` 两种 Kind；Designated / Operational / Suspense 类账户**不能挂 vIBAN**。
+- 单个机构最多可开 **1000 万个 vIBAN**，7×24×365 全天候开户。
+
+##### （2）GBP 账户类型（Kind）清单
+
+| Kind（接口枚举）     | 别名                          | 用途                                                         | 能否挂 vIBAN |
+| -------------------- | ----------------------------- | ------------------------------------------------------------ | ------------ |
+| `YourFunds`          | Operational / Your Funds 账户 | 机构自有运营资金（手续费、利息收入等）                       | 否           |
+| `GeneralSegregated`  | General Segregation / Segregated Pooled / General Safeguarded | 池化账户，为一个或多个客户隔离持有资金（Safeguarding 用途）  | **是**       |
+| `DesignatedSegregated` | Designated Segregation / Safeguarded Designated | 仅为单个客户隔离持有资金                                     | 否           |
+| `GeneralClient`      | General Client / Client Money Pooled (FCA CASS 7) | 池化账户，为一个或多个具名客户按 CASS 7 持有客户资金         | **是**       |
+| `DesignatedClient`   | Designated Client / Client Money Designated | 仅为单个客户按 CASS 7 持有客户资金                           | 否           |
+| —（系统/合约分配）   | Mandated Minimum Balance      | 机构按与 ClearBank 合同约定的强制最低留存余额               | 否           |
+| —（系统分配）        | Bacs Suspense                 | BACS 无法入账到目标账户时的挂账户，**不可从中发起付款**       | 否           |
+| —（仅 Embedded 适用）| Other Client Suspense         | 一般仅 Embedded Banking Partner 适用                        | 否           |
+
+> 重要：`Kind` 一旦在创建时确定，**ClearBank 不允许后续修改**，因此 APG 必须在接入前确认资金性质（safeguarding 还是 CASS 7 client money），一次选对。
+
+##### （3）APG 接入采用的账户结构
+
+依据上表，为实现"每个客户独立 vIBAN 收付款"，APG 的账户结构如下（由运营在 ClearBank 平台 / 通过 `POST /v3/Accounts` 事前开好，并录入"渠道-银行配置"）：
+
+| 层级 | 账户 | Kind | 数量 | 说明 |
+| ---- | ---- | ---- | ---- | ---- |
+| L0   | APG Operational 账户 | `YourFunds` | 1 | 收取手续费、利息等 APG 自有资金 |
+| L1   | APG 客户资金池账户   | `GeneralSegregated`（或 `GeneralClient`，二选一，待澄清 TODO-1） | 1 | 作为 house pool，**所有客户 vIBAN 挂在其下** |
+| L2   | 客户 vIBAN           | （Virtual，无 Kind） | 每客户 1 个 | 每个客户 1 个 GBP vIBAN，自带 sort code/account number/IBAN |
+
+- L0、L1 为 Real account，**全公司各开一个**，不随客户增加，运营事前开通。
+- L2 vIBAN 才是"创建客户账户"动作真正产出的对象，**每个客户开 1 个**。
+
+##### （4）创建客户 vIBAN 的判断条件与动作
+
+- 判断条件：
   - 客户币种包含 GBP；
-  - 客户开户地区在 ClearBank 支持范围内；
+  - 客户开户地区在 ClearBank 支持范围内（UK、直布罗陀、根西岛、马恩岛、泽西岛）；
   - 客户 KYC 通过且渠道进件审核通过。
-- 调用 `POST /v2/Accounts/{accountId}/Virtual`（其中 `accountId` 为 Real Account ID）创建 vIBAN，**一次仅创建一个 GBP vIBAN**（CC 是一次开 5 个 VA，ClearBank 不支持批量、不涉及多币种，只开 1 个 GBP vIBAN）。
-- 创建成功后将 vIBAN 信息（sort code、account number、IBAN、accountId、ownerName）落库到"账户中心"。
+- 调用 `POST /v3/Accounts/{realAccountId}/Virtual` 在 **L1 池化账户（`GeneralSegregated`/`GeneralClient`）** 之下创建 vIBAN，`realAccountId` 取"渠道-银行配置"中登记的 L1 Real account id；**一次仅创建一个 GBP vIBAN**（CC 是一次开 5 个 VA，ClearBank 不支持批量、不涉及多币种）。
+- 创建成功后将 vIBAN 信息（sort code、account number、IBAN、accountId、ownerName、所属 realAccountId）落库到"账户中心"。
 
 ### 2.2 账户管理
 
@@ -95,7 +135,8 @@ ClearBank 的账户体系与 CC 不同：
 
 - 新增渠道：ClearBank（渠道 ID、关联银行、商户号、API 公私钥对、回调地址 等）
 - 新增通道：参见 2.4.2 通道筛选 中"英国本地 GBP-FPS / CHAPS / BACS / Cross-Border"四条通道
-- ClearBank 渠道下账户类型仅一种：本地收款账户（UK，GBP）。原 CC 渠道下"USD/EUR/HKD/CAD/全球"账户类型不复制到 ClearBank。
+- ClearBank 渠道下对客只暴露一种账户：本地 GBP 收款 vIBAN（挂在 L1 池化 Real account 之下，见 2.1.4）。原 CC 渠道下"USD/EUR/HKD/CAD/全球"账户类型不复制到 ClearBank。
+- 运营侧需额外维护两类 Real account 配置项：L0 `YourFunds`（手续费户）、L1 `GeneralSegregated`/`GeneralClient`（客户资金池户），均为创建后 Kind 不可变。
 
 #### 2.2.2 账户申请流程
 
@@ -133,8 +174,8 @@ ClearBank 单次开户成功后，仅生成 **1 个本地 GBP vIBAN**，不存�
 
 **2. 创建账户**
 
-创建 vIBAN URL：`POST /v2/Accounts/{realAccountId}/Virtual`
-查询 vIBAN URL：`GET /v2/Accounts/{accountId}/Virtual`
+创建 vIBAN URL：`POST /v3/Accounts/{realAccountId}/Virtual`（`realAccountId` 必须是 `GeneralSegregated`/`GeneralClient` 池化账户）
+查询 vIBAN URL：`GET /v3/Accounts/{realAccountId}/Virtual`
 
 **关联关系**：客户 ID ──1:N── vIBAN ──1:1── Owner（即 sub-account-equivalent），ClearBank 无独立 contact 实体，"持有人/Owner 名"直接挂在 vIBAN 创建参数中。
 
@@ -226,7 +267,7 @@ ClearBank 单次开户成功后，仅生成 **1 个本地 GBP vIBAN**，不存�
 
 ##### 2.2.2.2 vIBAN 账户管理
 
-vIBAN 一经分配，**sort code + account number 不可变更**（ClearBank 设计如此）。若 vIBAN 持有人信息（地址、负责人）变更，需调用 `PATCH /v2/Accounts/Virtual/{accountId}` 更新 owner 信息。状态变更：
+vIBAN 一经分配，**sort code + account number 不可变更**，且所属 Real account 的 `Kind` 不可变更（ClearBank 设计如此）。若 vIBAN 持有人信息（地址、负责人）变更，需调用 `PATCH /v3/Accounts/Virtual/{accountId}` 更新 owner 信息。状态变更：
 
 - 启用：`enabled`
 - 暂停：`suspended`（暂停后不再接收来账，挂账退回）
@@ -665,7 +706,9 @@ CB
 | 维度                | Currency Cloud                            | ClearBank                                                  |
 | ------------------- | ----------------------------------------- | ---------------------------------------------------------- |
 | 渠道性质            | 多币种、全球                              | 单币种 GBP、UK 本地 + UK 跨境出境                            |
-| 一次开户产出账户数  | 5 个 VA（USD / EUR / GBP / CAD / Global） | 1 个 GBP vIBAN                                              |
+| 账户模型            | 渠道账户 + sub-account + contact           | Real account（指定 Kind，创建后不可改）+ Virtual account(vIBAN)；vIBAN 仅能挂在 `GeneralSegregated`/`GeneralClient` 池化账户下 |
+| 账户类型 Kind 枚举  | 无此概念                                  | `YourFunds` / `GeneralSegregated` / `DesignatedSegregated` / `GeneralClient` / `DesignatedClient`（另有 Mandated Minimum Balance、Bacs Suspense、Other Client Suspense 系统账户） |
+| 一次开户产出账户数  | 5 个 VA（USD / EUR / GBP / CAD / Global） | 1 个 GBP vIBAN（挂在事前开好的池化 Real account 下）        |
 | 联系人体系          | 必须 `/v2/contacts/create`              | 无独立 contact，owner 信息随 vIBAN 一并提交                  |
 | 是否外包 KYC        | 支持                                      | 不支持，APG 侧完成所有合规筛查                              |
 | 换汇                | 支持，`/v2/conversions/create`            | 不支持                                                     |
@@ -680,9 +723,11 @@ CB
 
 ## 5. 待澄清问题（TODO）
 
-1. ClearBank 开户主体 APG 在 ClearBank 是签约 "Embedded Banking" 还是 "Agency Banking"？涉及到 Real Account 是否可以直接用于 POBO（Embedded 可以，Agency 需走代理）。
-2. ClearBank Multi-Currency Accounts（USD/EUR 段）是否在本期开放给客户？本期文档默认不开放。
-3. ClearBank 出境 GBP（CrossBorder/GBP）的费率与代理行（哪家 correspondent bank）是否已合同确定？影响"对客手续费"计算。
-4. ClearBank webhook 重试规则：ClearBank 默认 5 次指数回退后停止推送。是否需要 APG 端在 D+1 跑批主动 `GET /v3/Payments/{endToEndId}` 兜底？
-5. Real Account 与 vIBAN 命名是否要在客户端展示？建议仅展示 vIBAN 信息，Real Account 内部使用。
-6. ClearBank 平台对接的 Sandbox 环境与 Production 环境的切换流程，是否需要新增运营配置开关？
+1. **（TODO-1）L1 客户资金池账户的 Kind 取 `GeneralSegregated`（Safeguarding）还是 `GeneralClient`（FCA CASS 7 client money）？** 取决于 APG 持有客户资金的法律性质，**创建后不可更改**，须在接入前由法务/合规拍板。这两类是《Account types》文档中唯一允许挂 vIBAN 的两种 Kind。
+2. ClearBank 开户主体 APG 在 ClearBank 是签约 "Embedded Banking" 还是 "Agency Banking"？涉及到 Real Account 是否可以直接用于 POBO（Embedded 可以，Agency 需走代理）；Other Client Suspense 账户也仅 Embedded Partner 适用。
+3. ClearBank Multi-Currency Accounts（USD/EUR 段）是否在本期开放给客户？本期文档默认不开放。注意多币种 vIBAN 同样**仅兼容 General Client / General Segregated** 账户。
+4. ClearBank 出境 GBP（CrossBorder/GBP）的费率与代理行（哪家 correspondent bank）是否已合同确定？影响"对客手续费"计算。
+5. ClearBank webhook 重试规则：ClearBank 默认 5 次指数回退后停止推送。是否需要 APG 端在 D+1 跑批主动 `GET /v3/Payments/{endToEndId}` 兜底？
+6. Real Account 与 vIBAN 命名是否要在客户端展示？建议仅展示 vIBAN 信息，Real Account 内部使用。
+7. ClearBank 平台对接的 Sandbox 环境与 Production 环境的切换流程，是否需要新增运营配置开关？
+8. 是否需要为 BACS 单独登记 Bacs Suspense 账户用于无法入账的挂账处理（《Account types》文档列为独立账户类型，不可付款）。
