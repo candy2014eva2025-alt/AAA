@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>汇款单管理 - APG全球收款系统</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; background: #f0f2f5; color: #303133; }
+
+.layout { display: flex; min-height: 100vh; }
+
+/* 侧边栏 */
+.sidebar { width: 230px; background: #1f2733; color: #bfcbd9; flex-shrink: 0; }
+.logo { display: flex; align-items: center; gap: 10px; padding: 18px 20px; }
+.logo .mark { width: 32px; height: 32px; border-radius: 6px; background: linear-gradient(135deg,#2bb6c4,#1f8fd4); display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px; }
+.logo .name { color:#fff; font-size:15px; font-weight:600; }
+.menu { padding: 8px 0; }
+.menu-item { display:flex; align-items:center; gap:10px; padding:13px 22px; font-size:14px; cursor:pointer; }
+.menu-item:hover { background:#2a3340; color:#fff; }
+.menu-item.group > .arrow { margin-left:auto; font-size:11px; opacity:.6; }
+.submenu { background:#1a212b; }
+.submenu .sub { padding:11px 22px 11px 54px; font-size:13px; cursor:pointer; color:#bfcbd9; }
+.submenu .sub:hover { color:#fff; }
+.submenu .sub.active { color:#409eff; }
+
+/* 主体 */
+.main { flex:1; display:flex; flex-direction:column; min-width:0; }
+.topbar { height:56px; background:#fff; border-bottom:1px solid #e4e7ed; display:flex; align-items:center; padding:0 20px; gap:16px; }
+.topbar .crumb { font-size:14px; color:#606266; }
+.topbar .crumb span { color:#c0c4cc; margin:0 6px; }
+.topbar .right { margin-left:auto; display:flex; align-items:center; gap:18px; color:#909399; }
+.topbar .avatar { width:34px; height:34px; border-radius:50%; background:#1f2733; color:#fff; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; }
+
+.content { flex:1; padding:0; background:#fff; }
+
+/* 标签页 */
+.tab-bar { display:flex; gap:6px; padding:8px 16px; background:#f5f7fa; border-bottom:1px solid #e4e7ed; }
+.tab { font-size:12px; padding:5px 12px; border:1px solid #d9d9d9; border-radius:3px; background:#fff; color:#606266; cursor:pointer; display:flex; align-items:center; gap:6px; }
+.tab.active { background:#ecf5ff; border-color:#409eff; color:#409eff; }
+.tab .dot { width:6px; height:6px; border-radius:50%; background:#409eff; }
+.tab .close { color:#909399; font-size:13px; }
+
+/* 筛选 */
+.filter { padding:18px 20px 6px; }
+.fgrid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px 20px; }
+.fitem { display:flex; flex-direction:column; gap:6px; }
+.fitem label { font-size:13px; color:#303133; font-weight:500; }
+.fitem input, .fitem select { height:34px; font-size:13px; padding:0 11px; border:1px solid #dcdfe6; border-radius:4px; background:#fff; color:#303133; width:100%; }
+.fitem input::placeholder { color:#c0c4cc; }
+.fitem input:focus, .fitem select:focus { outline:none; border-color:#409eff; }
+.frange { display:flex; align-items:center; gap:6px; }
+.frange input { flex:1; min-width:0; }
+.frange .to { font-size:12px; color:#909399; }
+.factions { display:flex; gap:10px; padding:14px 0 4px; }
+.btn { height:34px; padding:0 18px; border-radius:4px; font-size:13px; cursor:pointer; border:1px solid #dcdfe6; background:#fff; color:#606266; display:inline-flex; align-items:center; gap:5px; }
+.btn:hover { background:#f5f7fa; }
+.btn-primary { background:#409eff; color:#fff; border-color:#409eff; }
+.btn-primary:hover { background:#3286e0; }
+
+/* 表格 */
+.table-wrap { padding:6px 20px 16px; overflow-x:auto; }
+table { width:100%; border-collapse:collapse; font-size:13px; min-width:1280px; }
+thead tr { background:#c9cdd6; }
+th { padding:12px; text-align:left; font-weight:500; font-size:13px; color:#303133; white-space:nowrap; }
+td { padding:13px 12px; border-bottom:1px solid #ebeef5; color:#606266; white-space:nowrap; }
+tbody tr:hover td { background:#f5f7fa; }
+.chk-col { width:40px; }
+input[type=checkbox] { width:14px; height:14px; accent-color:#409eff; cursor:pointer; }
+.col-id { font-family:"SFMono-Regular",Consolas,monospace; font-size:12px; color:#606266; max-width:150px; overflow:hidden; text-overflow:ellipsis; }
+.cur-badge { padding:2px 7px; border-radius:3px; background:#f0f0f0; color:#909399; font-size:11px; }
+.amt { font-weight:500; color:#303133; }
+.badge { display:inline-flex; align-items:center; padding:2px 9px; border-radius:10px; font-size:12px; font-weight:500; }
+.b-pending { background:#FAEEDA; color:#854F0B; }
+.b-matched { background:#EAF3DE; color:#3B6D11; }
+.b-unmatched { background:#f0f0f0; color:#909399; }
+.b-failed { background:#FCEBEB; color:#A32D2D; }
+
+/* 分页 */
+.pagination { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-top:1px solid #ebeef5; font-size:13px; }
+.pag-info { color:#606266; display:flex; align-items:center; gap:8px; }
+.pag-info select { height:28px; font-size:13px; padding:0 6px; border:1px solid #dcdfe6; border-radius:4px; }
+.pag-btns { display:flex; gap:4px; align-items:center; }
+.pag-btn { min-width:28px; height:28px; padding:0 8px; border-radius:4px; border:1px solid #dcdfe6; background:#fff; color:#606266; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.pag-btn:hover { color:#409eff; }
+.pag-btn.active { background:#409eff; color:#fff; border-color:#409eff; }
+.pag-btn:disabled { opacity:.4; cursor:not-allowed; }
+</style>
+</head>
+<body>
+<div class="layout">
+  <!-- 侧边栏 -->
+  <aside class="sidebar">
+    <div class="logo"><div class="mark">AT</div><div class="name">APG全球收款系统</div></div>
+    <nav class="menu">
+      <div class="menu-item group">👤 账户管理 <span class="arrow">▾</span></div>
+      <div class="menu-item group" style="background:#2a3340;color:#fff;">¥ 收款 <span class="arrow">▴</span></div>
+      <div class="submenu">
+        <div class="sub">来账报文管理</div>
+        <div class="sub">外贸收款来账…</div>
+        <div class="sub">退款管理</div>
+        <div class="sub">同名付款人管理</div>
+        <div class="sub">收款c2c自动入账</div>
+        <div class="sub active">汇款单管理</div>
+      </div>
+      <div class="menu-item group">🛒 订单管理 <span class="arrow">▾</span></div>
+      <div class="menu-item group">¥ 提现 <span class="arrow">▾</span></div>
+      <div class="menu-item group">¥ 付款 <span class="arrow">▾</span></div>
+      <div class="menu-item group">¥ 代扣结算管理 <span class="arrow">▾</span></div>
+      <div class="menu-item group">¥ 金融同业 <span class="arrow">▾</span></div>
+      <div class="menu-item group">📊 财务报表 <span class="arrow">▾</span></div>
+    </nav>
+  </aside>
+
+  <!-- 主体 -->
+  <div class="main">
+    <header class="topbar">
+      <span style="color:#606266;cursor:pointer;">☰</span>
+      <div class="crumb">首页 <span>/</span> 收款 <span>/</span> 汇款单管理</div>
+      <div class="right">
+        <span>🔍</span><span>⛶</span>
+        <div class="avatar">AT</div>
+      </div>
+    </header>
+
+    <div class="content">
+      <div class="tab-bar">
+        <div class="tab">首页</div>
+        <div class="tab active"><span class="dot"></span>汇款单管理 <span class="close">×</span></div>
+      </div>
+
+      <div class="filter">
+        <div class="fgrid">
+          <div class="fitem"><label>汇款单号</label><input id="f-id" placeholder="请输入汇款单号"></div>
+          <div class="fitem"><label>合作方汇款单号</label><input id="f-pid" placeholder="请输入合作方汇款单号"></div>
+          <div class="fitem"><label>预期付款人名称</label><input id="f-payer" placeholder="请输入预期付款人名称"></div>
+          <div class="fitem"><label>收款账号</label><input id="f-account" placeholder="请输入收款账号"></div>
+          <div class="fitem"><label>收款银行名称</label><input id="f-bank" placeholder="请输入收款银行名称"></div>
+          <div class="fitem"><label>附言编号</label><input id="f-memo" placeholder="请输入附言编号"></div>
+          <div class="fitem"><label>币种</label>
+            <select id="f-cur"><option value="">全部</option><option>USD</option><option>EUR</option><option>GBP</option><option>CNY</option></select>
+          </div>
+          <div class="fitem"><label>汇款单状态</label>
+            <select id="f-status"><option value="">全部</option><option>PENDING</option><option>MATCHED</option><option>FAILED</option></select>
+          </div>
+          <div class="fitem"><label>匹配状态</label>
+            <select id="f-match"><option value="">全部</option><option>未匹配</option><option>已匹配</option></select>
+          </div>
+          <div class="fitem"><label>交易时间</label>
+            <div class="frange"><input type="date" id="f-ts"><span class="to">至</span><input type="date" id="f-te"></div>
+          </div>
+          <div class="fitem"><label>过期时间</label><input type="date" id="f-expire"></div>
+        </div>
+        <div class="factions">
+          <button class="btn btn-primary" onclick="doSearch()">🔍 搜索</button>
+          <button class="btn" onclick="doReset()">↻ 重置</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>汇款单号</th><th>合作方汇款单号</th><th>附言编号</th><th>交易时间</th><th>币种</th>
+            <th>金额</th><th>已关联金额</th><th>剩余可关联金额</th><th>容差金额</th>
+            <th>预期付款人名称</th><th>收款账号</th><th>收款银行名称</th><th>过期时间</th>
+            <th>汇款单状态</th><th>匹配状态</th><th>不可选原因</th><th>已匹配来账流水ID</th>
+            <th>匹配时间</th><th>创建时间</th><th>更新时间</th>
+          </tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+
+      <div class="pagination">
+        <div class="pag-info">共 <strong id="pag-total">68</strong> 条
+          <select onchange="changeSize(this.value)"><option>10</option><option>20</option><option>50</option></select> 条/页
+        </div>
+        <div class="pag-btns" id="pag-btns"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const RAW = [
+  {id:'APG2059212670...',pid:'TESTB3F70F04AF...',memo:'PAY20260515001',time:'2026-05-15 14:52:00',cur:'USD',amt:245.00,linked:0,remain:245.00,tol:0,payer:'John BCC Smith',account:'GB56TCCL12345664...',bank:'DBS Bank',expire:'2026-05-27 16:00',status:'PENDING',match:'未匹配',reason:'-',mid:'-',mtime:'-',ctime:'2026-05-26 17:58:54',utime:'2026-05-26 17:58'},
+  {id:'APG2059210872...',pid:'O15088903972487...',memo:'PAY20260526009',time:'2026-05-26 17:51:44',cur:'EUR',amt:1000.00,linked:0,remain:1000.00,tol:0,payer:'Sun Yuxiao',account:'GB01TCCL22010804...',bank:'The Currency Cloud Limit...',expire:'2026-05-27 18:00',status:'PENDING',match:'未匹配',reason:'-',mid:'-',mtime:'-',ctime:'2026-05-26 17:51:45',utime:'2026-05-26 17:51'},
+  {id:'APG2057761639...',pid:'O15074411645492...',memo:'PAY20260522037',time:'2026-05-22 17:53:00',cur:'EUR',amt:6.09,linked:0,remain:6.09,tol:0,payer:'Sun Yuxiao',account:'GB01TCCL22010804...',bank:'The Currency Cloud Limit...',expire:'2026-05-23 18:00',status:'PENDING',match:'未匹配',reason:'-',mid:'-',mtime:'-',ctime:'2026-05-22 17:53:01',utime:'2026-05-22 17:53'},
+  {id:'APG2057757229...',pid:'O15074367532529...',memo:'PAY20260522036',time:'2026-05-22 17:35:28',cur:'EUR',amt:6.09,linked:0,remain:6.09,tol:0,payer:'Sun Yuxiao',account:'GB01TCCL22010804...',bank:'The Currency Cloud Limit...',expire:'2026-05-23 18:00',status:'PENDING',match:'未匹配',reason:'-',mid:'-',mtime:'-',ctime:'2026-05-22 17:35:29',utime:'2026-05-22 17:35'},
+  {id:'APG2057754636...',pid:'O15074341613450...',memo:'PAY20260522035',time:'2026-05-22 17:25:10',cur:'EUR',amt:205.99,linked:0,remain:205.99,tol:0,payer:'Sun Yuxiao',account:'GB01TCCL22010804...',bank:'The Currency Cloud Limit...',expire:'2026-05-23 18:00',status:'PENDING',match:'未匹配',reason:'-',mid:'-',mtime:'-',ctime:'2026-05-22 17:25:11',utime:'2026-05-22 17:25'},
+  {id:'APG2057750859...',pid:'O15074303844916...',memo:'PAY20260522034',time:'2026-05-22 17:10:10',cur:'EUR',amt:205.99,linked:0,remain:205.99,tol:0,payer:'Sun Yuxiao',account:'GB01TCCL22010804...',bank:'The Currency Cloud Limit...',expire:'2026-05-23 18:00',status:'PENDING',match:'未匹配',reason:'-',mid:'-',mtime:'-',ctime:'2026-05-22 17:10:11',utime:'2026-05-22 17:10'},
+  {id:'APG2057742455...',pid:'O15074219783976...',memo:'PAY20260522033',time:'2026-05-22 16:36:46',cur:'EUR',amt:205.99,linked:0,remain:205.99,tol:0,payer:'Sun Yuxiao',account:'GB01TCCL22010804...',bank:'The Currency Cloud Limit...',expire:'2026-05-23 17:00',status:'PENDING',match:'未匹配',reason:'-',mid:'-',mtime:'-',ctime:'2026-05-22 16:36:47',utime:'2026-05-22 16:36'},
+  {id:'APG2057721042...',pid:'O15074005681115...',memo:'PAY20260522028',time:'2026-05-22 15:11:41',cur:'EUR',amt:205.99,linked:0,remain:205.99,tol:0,payer:'Sun Yuxiao',account:'GB01TCCL22010804...',bank:'The Currency Cloud Limit...',expire:'2026-05-23 16:00',status:'PENDING',match:'未匹配',reason:'-',mid:'-',mtime:'-',ctime:'2026-05-22 15:11:42',utime:'2026-05-22 15:11'},
+  {id:'APG2057720584...',pid:'O15074001101899...',memo:'PAY20260522027',time:'2026-05-22 15:09:52',cur:'EUR',amt:6.09,linked:0,remain:6.09,tol:0,payer:'Sun Yuxiao',account:'GB01TCCL22010804...',bank:'The Currency Cloud Limit...',expire:'2026-05-23 16:00',status:'PENDING',match:'未匹配',reason:'-',mid:'-',mtime:'-',ctime:'2026-05-22 15:09:53',utime:'2026-05-22 15:09'},
+  {id:'APG2057719794...',pid:'O15073993155874...',memo:'PAY20260522026',time:'2026-05-22 15:06:43',cur:'USD',amt:6.09,linked:0,remain:6.09,tol:0,payer:'ZHANG ZIYUE',account:'0334361708',bank:'Community Federal Savi...',expire:'2026-05-23 16:00',status:'PENDING',match:'未匹配',reason:'-',mid:'-',mtime:'-',ctime:'2026-05-22 15:06:44',utime:'2026-05-22 15:06'},
+];
+
+let page = 1, size = 10, data = [...RAW];
+
+function statusBadge(s){const m={PENDING:'b-pending',MATCHED:'b-matched',FAILED:'b-failed'};return `<span class="badge ${m[s]||'b-pending'}">${s}</span>`;}
+function matchBadge(s){return s==='已匹配'?`<span class="badge b-matched">已匹配</span>`:`<span class="badge b-unmatched">未匹配</span>`;}
+
+function render(){
+  const rows = data.slice((page-1)*size, page*size);
+  document.getElementById('tbody').innerHTML = rows.map(r=>`
+    <tr>
+      <td class="col-id" title="${r.id}">${r.id}</td>
+      <td class="col-id" title="${r.pid}">${r.pid}</td>
+      <td>${r.memo}</td>
+      <td>${r.time}</td>
+      <td><span class="cur-badge">${r.cur}</span></td>
+      <td class="amt">${r.amt.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+      <td>${r.linked.toFixed(2)}</td>
+      <td class="amt">${r.remain.toLocaleString('en-US',{minimumFractionDigits:2})}</td>
+      <td>${r.tol.toFixed(2)}</td>
+      <td>${r.payer}</td>
+      <td class="col-id">${r.account}</td>
+      <td>${r.bank}</td>
+      <td style="color:#909399">${r.expire}</td>
+      <td>${statusBadge(r.status)}</td>
+      <td>${matchBadge(r.match)}</td>
+      <td style="color:#c0c4cc">${r.reason}</td>
+      <td style="color:#c0c4cc">${r.mid}</td>
+      <td style="color:#c0c4cc">${r.mtime}</td>
+      <td style="color:#909399">${r.ctime}</td>
+      <td style="color:#909399">${r.utime}</td>
+    </tr>`).join('');
+}
+
+function renderPag(){
+  const pages = Math.ceil(data.length/size);
+  document.getElementById('pag-total').textContent = data.length;
+  let h=`<button class="pag-btn" onclick="go(${page-1})" ${page===1?'disabled':''}>‹</button>`;
+  const show=[];for(let i=1;i<=pages;i++){if(i===1||i===pages||(i>=page-1&&i<=page+1))show.push(i);else if(show[show.length-1]!=='...')show.push('...');}
+  show.forEach(p=>{h+=p==='...'?`<span style="padding:0 4px;color:#c0c4cc">…</span>`:`<button class="pag-btn ${p===page?'active':''}" onclick="go(${p})">${p}</button>`;});
+  h+=`<button class="pag-btn" onclick="go(${page+1})" ${page===pages?'disabled':''}>›</button>`;
+  document.getElementById('pag-btns').innerHTML=h;
+}
+function go(p){const pages=Math.ceil(data.length/size);if(p<1||p>pages)return;page=p;render();renderPag();}
+function changeSize(v){size=+v;page=1;render();renderPag();}
+function toggleAll(el){document.querySelectorAll('.row-chk').forEach(c=>c.checked=el.checked);}
+
+function doSearch(){
+  const g=id=>document.getElementById(id).value.trim().toLowerCase();
+  const fid=g('f-id'),fpid=g('f-pid'),fpayer=g('f-payer'),facc=g('f-account'),fbank=g('f-bank'),fmemo=g('f-memo');
+  const fcur=document.getElementById('f-cur').value,fst=document.getElementById('f-status').value,fmt=document.getElementById('f-match').value;
+  data=RAW.filter(r=>{
+    if(fid&&!r.id.toLowerCase().includes(fid))return false;
+    if(fpid&&!r.pid.toLowerCase().includes(fpid))return false;
+    if(fpayer&&!r.payer.toLowerCase().includes(fpayer))return false;
+    if(facc&&!r.account.toLowerCase().includes(facc))return false;
+    if(fbank&&!r.bank.toLowerCase().includes(fbank))return false;
+    if(fmemo&&!r.memo.toLowerCase().includes(fmemo))return false;
+    if(fcur&&r.cur!==fcur)return false;
+    if(fst&&r.status!==fst)return false;
+    if(fmt&&r.match!==fmt)return false;
+    return true;
+  });
+  page=1;render();renderPag();
+}
+function doReset(){
+  ['f-id','f-pid','f-payer','f-account','f-bank','f-memo','f-ts','f-te','f-expire'].forEach(i=>document.getElementById(i).value='');
+  ['f-cur','f-status','f-match'].forEach(i=>document.getElementById(i).value='');
+  data=[...RAW];page=1;render();renderPag();
+}
+
+render();renderPag();
+</script>
+</body>
+</html>
